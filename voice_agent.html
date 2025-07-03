@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voice Agent Chat</title>
+  <style>
+    body { font-family:sans-serif; margin:2rem auto; max-width:600px; }
+    #chat { border:1px solid #ccc; height:60vh; overflow-y:auto;
+            padding:1rem; display:flex; flex-direction:column; gap:0.5rem; }
+    .bubble { max-width:70%; padding:0.75rem; border-radius:12px; }
+    .user      { background:#daf8fc; align-self:flex-end; }
+    .assistant { background:#f0f0f0; align-self:flex-start; }
+    #mic { padding:1rem; font-size:1rem; margin-top:1rem; width:100%; }
+  </style>
+</head>
+<body>
+  <h2>🤖 Voice Chat</h2>
+  <div id="chat"></div>
+  <button id="mic">Hold to Talk</button>
+
+  <script>
+    const chat = document.getElementById('chat');
+    const mic  = document.getElementById('mic');
+
+    // Setup Web Speech API
+    const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+    if (!SR) throw alert("Web Speech API unsupported");
+    const recog = new SR();
+    recog.continuous=false; recog.interimResults=false; recog.lang='en-US';
+
+    // Display SSE tokens as they arrive
+    async function streamReply(transcript) {
+      const source = new EventSource('/api/chat');
+      // Immediately POST transcript to SSE endpoint
+      fetch('/api/chat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({transcript})
+      });
+      let assistantBubble = document.createElement('div');
+      assistantBubble.className='bubble assistant';
+      chat.appendChild(assistantBubble);
+
+      source.onmessage = e => {
+        assistantBubble.textContent += e.data;
+        chat.scrollTop = chat.scrollHeight;
+      };
+      source.addEventListener('end', async () => {
+        source.close();
+        const reply = assistantBubble.textContent;
+        // TTS
+        const res = await fetch('http://localhost:8002/api/tts',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ text: reply })
+        });
+        const {audio} = await res.json();
+        new Audio(`data:audio/wav;base64,${audio}`).play();
+      });
+    }
+
+    recog.onresult = e => {
+      const transcript = Array.from(e.results).map(r=>r[0].transcript).join('');
+      let userBubble = document.createElement('div');
+      userBubble.className='bubble user';
+      userBubble.textContent = transcript;
+      chat.appendChild(userBubble);
+      chat.scrollTop = chat.scrollHeight;
+      streamReply(transcript);
+    };
+
+    mic.addEventListener('mousedown',()=>recog.start());
+    mic.addEventListener('mouseup',  ()=>recog.stop());
+  </script>
+</body>
+</html>
