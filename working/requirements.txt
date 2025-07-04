@@ -1,0 +1,6 @@
+gradio
+SpeechRecognition
+pyttsx3
+google-genai
+python-dotenv
+pyaudio

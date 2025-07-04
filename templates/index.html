@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Freddy Voice Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Freddy: Crystal Group Voice Assistant</h2>
+    <div id="chat"></div>
+    <div class="controls">
+      <button id="start-btn">Start</button>
+      <button id="stop-btn" disabled>Stop</button>
+    </div>
+    <audio id="bot-audio" controls style="display:none"></audio>
+  </div>
+  <script>
+    let sessionId = null;
+    let chatDiv = document.getElementById('chat');
+    let startBtn = document.getElementById('start-btn');
+    let stopBtn = document.getElementById('stop-btn');
+    let mediaRecorder, audioChunks = [];
+
+    function appendMsg(sender, text, cls) {
+      let div = document.createElement('div');
+      div.className = cls;
+      div.innerHTML = `<b>${sender}:</b> ${text}`;
+      chatDiv.appendChild(div);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    }
+
+    startBtn.onclick = async function() {
+      sessionId = Date.now().toString();
+      chatDiv.innerHTML = '';
+      audioChunks = [];
+      let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorder.start();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      appendMsg("System", "Recording... Click Stop when done.", "system");
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    };
+
+    stopBtn.onclick = function() {
+      mediaRecorder.stop();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      appendMsg("System", "Processing your question...", "system");
+      mediaRecorder.onstop = function() {
+        let audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        let formData = new FormData();
+        formData.append('session_id', sessionId);
+        formData.append('audio', audioBlob, 'input.webm');
+        fetch('/api/message', { method: 'POST', body: formData })
+          .then(r => r.json())
+          .then(data => {
+            appendMsg("You", data.user_text, "user");
+            appendMsg("Freddy", data.bot, "bot");
+            fetch('/api/speak', {
+              method: 'POST',
+              body: new URLSearchParams({ text: data.bot })
+            })
+            .then(r => r.blob())
+            .then(blob => {
+              let audio = document.getElementById('bot-audio');
+              audio.src = URL.createObjectURL(blob);
+              audio.style.display = "block";
+              audio.play();
+            });
+          });
+      };
+    };
+  </script>
+</body>
+</html>

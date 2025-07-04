@@ -1,6 +1,6 @@
-gradio
+Flask
 SpeechRecognition
-pyttsx3
-google-genai
+gtts
+pydub
+google-generativeai
 python-dotenv
-pyaudio
